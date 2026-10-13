@@ -262,6 +262,8 @@ def faixa_broll(cfg, v, hk, rotulo, total, fps, pasta):
         fp.write(''.join(f"file '{p}'\n" for p in pedacos))
     saida = os.path.join(pasta, 'broll.mp4')
     ff(['-f', 'concat', '-safe', '0', '-i', lst, '-c', 'copy', saida])
+    for p in pedacos:                              # os pedaços já estão dentro do broll.mp4
+        os.remove(p)
     return saida
 
 def filtro_caminho(caminho):
@@ -523,9 +525,11 @@ def render(cfg, v, hk, var, pals, saida, tmp, kit, ate=None, trecho=None, preset
         y_ana = int(v['dividida_y'])
         broll = faixa_broll(cfg, v, hk, rotulo, L['bruto'], fps, os.path.join(tmp, 'broll'))
         lista_leg = camada_legenda(pals_na_saida(pals, L), L['bruto'], fps, os.path.join(tmp, 'legenda'))
-        legenda = os.path.join(tmp, 'legenda', 'legenda.mov')     # faixa com alfa pré-renderizada (qtrle)
-        ff(['-f', 'concat', '-safe', '0', '-i', lista_leg, '-t', f"{L['bruto']:.3f}", '-vf', f'fps={fps},format=argb',
-            '-c:v', 'qtrle', legenda])
+        # faixa com alfa pré-renderizada em PNG dentro do .mov (sem perda; o qtrle dava 1,5 GB por vídeo e
+        # lotou o disco em 13/10, o PNG fica em poucos MB porque quase todo quadro é transparente)
+        legenda = os.path.join(tmp, 'legenda', 'legenda.mov')
+        ff(['-f', 'concat', '-safe', '0', '-i', lista_leg, '-t', f"{L['bruto']:.3f}", '-vf', f'fps={fps},format=rgba',
+            '-c:v', 'png', legenda])
         ph = os.path.join(tmp, 'headline.png')
         png_headline(hk.get('headline') or hk['titulo'], ph)
         i_hl = entrada('-loop', '1', '-framerate', str(fps), '-t', f"{HEADLINE_DUR:.3f}", '-i', ph)
@@ -690,6 +694,8 @@ def render(cfg, v, hk, var, pals, saida, tmp, kit, ate=None, trecho=None, preset
         '-pix_fmt', 'yuv420p',
         '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', parte])
     os.replace(parte, saida)
+    for sub in ('broll', 'legenda'):               # temporários da tela dividida: refeitos se precisar renderizar de novo
+        shutil.rmtree(os.path.join(tmp, sub), ignore_errors=True)
     return L, fps
 
 def conferencia(saida, L, momentos_t, destino_png):

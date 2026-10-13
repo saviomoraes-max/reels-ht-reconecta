@@ -23,7 +23,8 @@ for video in "${videos[@]}"; do
   ffmpeg -nostdin -loglevel error -y -i "$video" -vn -ac 1 -ar 16000 "$base/audio/$nome.wav" || { echo "ffmpeg falhou: $nome"; continue; }
   echo "== $nome"
   zsh "$pipeline/transcrever_scribe.sh" "$base/audio/$nome.wav" "$saida"   # vocab.txt (local) ou vocab.exemplo.txt
-  grep -q '"text"' "$saida" && (( feitos++ ))
+  # transcrição ok = o WAV não serve mais (é refeito se precisar transcrever de novo)
+  grep -q '"text"' "$saida" && { (( feitos++ )); rm -f "$base/audio/$nome.wav" "$base/audio/._$nome.wav"; }
   sleep 1
 done
 echo "\n$feitos de ${#videos} transcritos"

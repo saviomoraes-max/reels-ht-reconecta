@@ -31,6 +31,23 @@ def achar(pasta, nome):
             return os.path.join(pasta, f)
     return None
 
+LIMITE_ORG = 199e6          # Publer: 200e6 bytes por arquivo; 195e6 refazia à toa um vídeo de 196 MB (VD012_C, 13/10)
+
+
+def limpar_temporarios(destino):
+    """Lote 100 % ok: apaga o que o render refaz sozinho se precisar (pedido do Sávio, 13/10: "vai apagando os
+    arquivos obsoletos pra gente sempre ter espaço"). Vídeo final, conferência, relatório e log ficam."""
+    import shutil
+    for sub in ('_peles_tmp', '_amostra'):
+        alvo = os.path.join(destino, sub)
+        if os.path.isdir(alvo):
+            shutil.rmtree(alvo, ignore_errors=True)
+    for raiz, _, arqs in os.walk(destino):
+        for nome in arqs:
+            if nome.endswith(('.part', '.part.mp4')):
+                os.remove(os.path.join(raiz, nome))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('plano')
@@ -104,15 +121,15 @@ def main():
             texto = ''.join(saida).strip()
             ultima = [l for l in texto.splitlines() if l.strip().startswith('[')]
             if not travou and p.returncode == 0:
-                # orgânico acima de 195 MB não sobe no Publer (limite 200 MB): refaz com x264 veryslow, MESMO CRF 18
+                # orgânico acima de LIMITE_ORG não sobe no Publer (limite 200.000.000 bytes): refaz com x264 veryslow, MESMO CRF 18
                 # (mesma qualidade, arquivo menor) — 06/10/2026, VD021_C saiu com 213 MB
                 fin = achar(pasta, nome) or achar(os.path.join(pasta, nome[:-4]), nome)
-                if vid == 'ORG' and fin and os.path.getsize(fin) > 195e6 and '--preset' in cmd and '--codec' not in cmd:
+                if vid == 'ORG' and fin and os.path.getsize(fin) > LIMITE_ORG and '--preset' in cmd and '--codec' not in cmd:
                     # veryslow não bastou (VD034_C da SEM41 sexta: 222 → 204 MB): HEVC na mesma qualidade
                     diz(f"   [{vid} {rot}] ainda {os.path.getsize(fin)/1e6:.0f} MB com veryslow: refazendo em HEVC (x265 CRF 20)")
                     cmd = [c for c in cmd if c not in ('--preset', 'veryslow')] + ['--codec', 'hevc']
                     continue
-                if vid == 'ORG' and fin and os.path.getsize(fin) > 195e6 and '--preset' not in cmd:
+                if vid == 'ORG' and fin and os.path.getsize(fin) > LIMITE_ORG and '--preset' not in cmd:
                     diz(f"   [{vid} {rot}] {os.path.getsize(fin)/1e6:.0f} MB passa do limite do Publer: refazendo com preset veryslow (mesmo CRF)")
                     cmd = cmd + ['--forcar', '--preset', 'veryslow']
                     continue
@@ -126,6 +143,9 @@ def main():
             diz(f"[{n}/{len(fila)}] {vid} {rot} FALHOU nas {a.tentativas} tentativas")
     diz(f"== fim: {len(fila) - len(falhas)}/{len(fila)} ok" + (f"; falharam: {falhas}" if falhas else ""))
     open(os.path.join(destino, '_lote', 'lote.fim'), 'w').write('\n'.join(falhas))
+    if not falhas:                                 # com falha, o temporário fica pra diagnóstico
+        limpar_temporarios(destino)
+        diz("== temporários apagados (_peles_tmp, _amostra, .part)")
 
 if __name__ == '__main__':
     main()
